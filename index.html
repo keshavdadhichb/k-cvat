@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CSV Data Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; background: #f9f9f9; color: #222; }
+    h1, h2 { text-align: center; }
+    input, select, button { margin: 1rem 0.5rem; padding: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 2rem; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: center; }
+    canvas { margin-top: 2rem; }
+    .flex { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-around; }
+    .panel { background: #fff; padding: 1rem; border: 1px solid #ddd; border-radius: 6px; flex: 1; min-width: 300px; }
+  </style>
+</head>
+<body>
+
+<h1>CSV Data Analyzer</h1>
+
+<div style="text-align: center;">
+  <input type="file" id="fileInput" accept=".csv" />
+  <select id="metricSelect"></select>
+  <select id="chartType">
+    <option value="bar">Bar</option>
+    <option value="line">Line</option>
+    <option value="pie">Pie</option>
+  </select>
+  <button onclick="renderChart()">Generate Chart</button>
+</div>
+
+<div class="flex">
+  <div class="panel" id="summaryStats">
+    <h2>Summary Statistics</h2>
+    <div id="statsContent"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Chart</h2>
+    <canvas id="mainChart" height="300"></canvas>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Data Table</h2>
+  <table id="dataTable"></table>
+</div>
+
+<script>
+  let parsedData = [];
+  let numericFields = [];
+
+  document.getElementById("fileInput").addEventListener("change", function (e) {
+    const file = e.target.files[0];
+    if (file) {
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: true,
+        complete: function (results) {
+          parsedData = results.data.filter(row => row["Image Name"]);
+          identifyNumericFields();
+          fillMetricDropdown();
+          renderStats();
+          renderTable();
+        }
+      });
+    }
+  });
+
+  function identifyNumericFields() {
+    numericFields = Object.keys(parsedData[0] || {}).filter(key =>
+      parsedData.every(row => typeof row[key] === "number")
+    );
+  }
+
+  function fillMetricDropdown() {
+    const select = document.getElementById("metricSelect");
+    select.innerHTML = "";
+    numericFields.forEach(field => {
+      const opt = document.createElement("option");
+      opt.value = field;
+      opt.textContent = field;
+      select.appendChild(opt);
+    });
+  }
+
+  function renderStats() {
+    const statsDiv = document.getElementById("statsContent");
+    statsDiv.innerHTML = "";
+
+    const totalRows = parsedData.length;
+    const labels = numericFields;
+    const summary = labels.map(label => {
+      const values = parsedData.map(r => r[label]).filter(x => typeof x === "number");
+      const mean = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const median = values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+      const variance = (values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length).toFixed(2);
+      const stddev = Math.sqrt(variance).toFixed(2);
+      return `<b>${label}</b><br>
+        Mean: ${mean}, Min: ${min}, Max: ${max}, Median: ${median}, Std Dev: ${stddev}<br><br>`;
+    });
+
+    statsDiv.innerHTML = `<p>Total Rows: ${totalRows}</p>` + summary.join("");
+  }
+
+  function renderTable() {
+    const table = document.getElementById("dataTable");
+    table.innerHTML = "";
+    const headers = Object.keys(parsedData[0] || {});
+    const thead = "<tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr>";
+    const tbody = parsedData.map(row =>
+      "<tr>" + headers.map(h => `<td>${row[h]}</td>`).join("") + "</tr>"
+    ).join("");
+    table.innerHTML = thead + tbody;
+  }
+
+  function renderChart() {
+    const metric = document.getElementById("metricSelect").value;
+    const chartType = document.getElementById("chartType").value;
+
+    const labels = parsedData.map(r => r["Image Name"]);
+    const values = parsedData.map(r => r[metric]);
+
+    const ctx = document.getElementById("mainChart").getContext("2d");
+    if (window.chartRef) window.chartRef.destroy();
+
+    window.chartRef = new Chart(ctx, {
+      type: chartType,
+      data: {
+        labels: labels,
+        datasets: [{
+          label: metric,
+          data: values,
+          backgroundColor: "rgba(75, 192, 192, 0.5)",
+          borderColor: "rgba(0, 128, 128, 1)",
+          borderWidth: 1,
+          fill: chartType !== "line"
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0 }
+          }
+        }
+      }
+    });
+  }
+</script>
+</body>
+</html>
